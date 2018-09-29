@@ -2,9 +2,12 @@ package cn.edu.zjut.jinkai.qiudao;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Message;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
@@ -13,7 +16,10 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.view.Window;
+import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -27,6 +33,8 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 
@@ -38,20 +46,63 @@ public class MainActivity extends AppCompatActivity {
 
     private Toast mToast;
     private TextView mNlpText;
-
+    private Button yuyin_btn;
     private AIUIAgent mAIUIAgent = null;
+
+    //新闻部分
+    private static String result = "http://123.206.224.40/news.json";
+    private Context mContext;
+    private TextView textView;
+    NewsUtils newsUtils;
+    List<NewsBean> listNewsBean;
+    ListView listview;
+    private Handler mHandler = new Handler() {
+        public void handleMessage(android.os.Message msg) {
+            listNewsBean = (List<NewsBean>) msg.obj;
+            NewsAdapter newsAdapter = new NewsAdapter(MainActivity.this, listNewsBean);
+            listview.setAdapter(newsAdapter);
+        };
+    };
+
 
     //交互状态
     private int mAIUIState = AIUIConstant.STATE_IDLE;
     @SuppressLint("ShowToast")
+    /**
+     *onCreate
+     */
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         this.requestWindowFeature(Window.FEATURE_NO_TITLE);
         setContentView(R.layout.activity_main);
+        yuyin_btn=(Button) findViewById(R.id.yuyin_btn);
         initLayout();
 
         mToast = Toast.makeText(this, "", Toast.LENGTH_SHORT);
         requestPermission();
+        mContext = MainActivity.this;
+        listview = (ListView) findViewById(R.id.list_news);
+
+        newsUtils = new NewsUtils();
+        NewsDBUtils newsDatabase = new NewsDBUtils(mContext);
+
+        ArrayList<NewsBean> allnews_database = NewsUtils.getDBNews(mContext);
+
+        if (allnews_database != null && allnews_database.size() > 0) {
+            NewsAdapter newsAdapter = new NewsAdapter(mContext, allnews_database);
+            listview.setAdapter(newsAdapter);
+        }
+
+        new Thread(new Runnable() {
+
+            @Override
+            public void run() {
+                listNewsBean = newsUtils.getNetNews(mContext, result);
+                Message message = Message.obtain();
+                message.obj = listNewsBean;
+                mHandler.sendMessage(message);
+            }
+        }).start();
     }
     //申请录音权限
     public void requestPermission() {
@@ -67,13 +118,12 @@ public class MainActivity extends AppCompatActivity {
      */
     private void initLayout() {
         //绑定语音识别按钮动作
-        findViewById(R.id.yuyin_btn).setOnClickListener(new View.OnClickListener() {
+        yuyin_btn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 if( !checkAIUIAgent() ){
                     return;
                 }
-
                     // 开始语音理解
                         startVoiceNlp();
             }
